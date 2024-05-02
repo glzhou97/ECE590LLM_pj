@@ -163,6 +163,70 @@ def sincos_softmax_kernel_feature_creator(data,
   data_prime = data_dash * diag_data
   return data_prime
 
+def hyperbolic_softmax_kernel_feature_creator(data,
+                                               projection_matrix,
+                                               attention_dims_t,
+                                               batch_dims_t,
+                                               precision,
+                                               is_query,
+                                               normalize_data=True,
+                                               eps=0.0001):
+  """Constructs SM_m^{hyp+} kernel features for fast softmax attention.
+
+
+  Args:
+    data: input for which features are computes
+    projection_matrix: random matrix used to compute features
+    attention_dims_t: tuple of attention dimensions
+    batch_dims_t: tuple of batch dimensions
+    precision: precision parameter
+    is_query: predicate indicating whether input data corresponds to queries or
+      keys
+    normalize_data: predicate indicating whether data should be normalized,
+    eps: numerical stabilizer.
+
+  Returns:
+    Random features for fast softmax attention.
+  """
+  # For each random projection feature w we want to produce two features, one is exp(w^T.x) and one is exp(-w^T.x) 
+  # so here we just expand the project features to be [w, -w]
+  new_projection_matrix = jnp.concat([projection_matrix, -1 * projection_matrix])
+  if normalize_data:
+    # We have e^{qk^T/sqrt{d}} = e^{q_norm k_norm^T}, where
+    # w_norm = w * data_normalizer for w in {q,k}.
+    data_normalizer = 1.0 / (jnp.sqrt(jnp.sqrt(data.shape[-1])))
+  else:
+    data_normalizer = 1.0
+  ratio = 1.0 / jnp.sqrt(new_projection_matrix.shape[0]) # 1/sqrt(m)
+  data_mod_shape = data.shape[0:len(batch_dims_t)] + new_projection_matrix.shape  # data_mode_shape is (batch_size, head, r, d)
+  data_thick_random_matrix = jnp.zeros(data_mod_shape) + new_projection_matrix  # basically copying the projection matrix by batch_size * head number of times 
+
+  # calculating w^T.x
+  data_dash = lax.dot_general(
+      data_normalizer * data, # normalized input features 
+      data_thick_random_matrix, # 
+      (((data.ndim - 1,), (data_thick_random_matrix.ndim - 1,)), # contracting dims
+       (batch_dims_t, batch_dims_t)), # batch dims 
+      precision=precision) 
+
+  # calculating h(x)
+  diag_data = jnp.square(data)  # element-wise square 
+  diag_data = jnp.sum(diag_data, axis=data.ndim - 1) # l2 norm square
+  diag_data = (diag_data / 2.0) * data_normalizer * data_normalizer 
+  diag_data = jnp.expand_dims(diag_data, axis=data.ndim - 1)
+
+  last_dims_t = (len(data_dash.shape) - 1,)
+  if is_query:
+    data_dash = ratio * (
+        jnp.exp(data_dash - diag_data -
+                jnp.max(data_dash, axis=last_dims_t, keepdims=True)) + eps) / jnp.sqrt(2)  # added the divde by sqrt(2) here in h
+  else:
+    data_dash = ratio * (
+        jnp.exp(data_dash - diag_data - jnp.max(
+            data_dash, axis=last_dims_t + attention_dims_t, keepdims=True)) +
+        eps) / jnp.sqrt(2)
+  return data_dash
+
 
 def generalized_kernel_feature_creator(data, projection_matrix, batch_dims_t,
                                        precision, kernel_fn, kernel_epsilon,
