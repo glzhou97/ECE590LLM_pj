@@ -1,5 +1,6 @@
 import functools
 import time
+import matplotlib.pyplot as plt
 from absl import logging
 from absl.testing import absltest
 from flax.linen import attention
@@ -11,17 +12,6 @@ import fast_attention
 from fast_attention_test import kernel_feature_creator
 import numpy as np
 
-#this function is for plotting the results of the experiment
-def plot_results(unstruct_errors, ortho_errors):
-    import matplotlib.pyplot as plt
-    plt.plot([10, 20, 50, 80, 100, 120, 150, 200], unstruct_errors, label='Unstructured Random Matrix')
-    plt.plot([10, 20, 50, 80, 100, 120, 150, 200], ortho_errors, label='Orthogonal Random Matrix')
-    plt.xlabel('Number of Random Features')
-    plt.ylabel('MSE')
-    plt.yscale('log')
-    plt.legend()
-    plt.savefig('exp1.png')
-
 #this experiment is responsible to test the fast softmax attention vs. the regular softmax attention
 def Exp1():
 
@@ -29,21 +19,23 @@ def Exp1():
     # key -> [batch_size, dim1, dim2, ..., dimN, num_heads, mem_channels]
     # value -> [batch_size, dim1, dim2, ..., dimN, num_heads, value_channels]
     unstruct_errors, ortho_errors = [], []
-    for nb_random_features in [10, 20, 50, 80, 100, 120, 150, 200]:
-        qk_dim = 10
-        v_dim = 10  # this might be sequence length?
-        batch_size = 1
-        dim1 = 16  # this is embedding dimension? 
+    unstruct_errors_std, ortho_errors_std = [], []
+    random_feature_range = range(15, 300, 20)
+    for nb_random_features in random_feature_range:
+        qk_dim = 16 # dimension of embeddings after W_k or W_q's transformation
+        v_dim = 16 # dimension of embeddings after W_vs transformation
+        seq_length = 4096
         num_heads = 1
-        shape_query = (batch_size, dim1, num_heads, qk_dim)
-        shape_key = (batch_size, dim1, num_heads, qk_dim)
-        shape_value = (batch_size, dim1, num_heads, v_dim)
+        batch_size = 15
+        shape_query = (batch_size, seq_length, num_heads, qk_dim)
+        shape_key = (batch_size, seq_length, num_heads, qk_dim)
+        shape_value = (batch_size, seq_length, num_heads, v_dim)
         query = random.normal(random.PRNGKey(0), shape_query)
         key = random.normal(random.PRNGKey(0), shape_key)
         value = random.normal(random.PRNGKey(0), shape_value)
 
         renormalize_attention = True
-        numerical_stabilizer = 0.0
+        numerical_stabilizer = 0
         redraw_features = False
         unidirectional = False
 
@@ -69,10 +61,28 @@ def Exp1():
         ortho_rfm_attention_result = fast_ortho_rfm_dot_product_attention.dot_product_attention(
             query, key, value)
 
-        unstruct_error = jnp.abs((standard_attention_result - unstruct_rfm_attention_result)**2)
-        ortho_error = jnp.abs((standard_attention_result - ortho_rfm_attention_result)**2)
-        unstruct_errors.append(np.mean(unstruct_error))
-        ortho_errors.append(np.mean(ortho_error))
-    plot_results(unstruct_errors, ortho_errors)
+        unstruct_errors_per_batch, ortho_errors_per_batch = [], []
+        # calculate the error per batch and aggregate to get stc
+        for b in range(0, batch_size): 
+            unstruct_error = (standard_attention_result[b] - unstruct_rfm_attention_result[b])**2
+            ortho_error = (standard_attention_result[b] - ortho_rfm_attention_result[b])**2
+            unstruct_errors_per_batch.append(np.mean(unstruct_error))
+            ortho_errors_per_batch.append(np.mean(ortho_error))
+        
+        unstruct_errors.append(np.mean(unstruct_errors_per_batch))
+        ortho_errors.append(np.mean(ortho_errors_per_batch))
+        unstruct_errors_std.append(np.std(unstruct_errors_per_batch))
+        ortho_errors_std.append(np.std(ortho_errors_per_batch))
+
+    plt.plot(random_feature_range, unstruct_errors, label='Unstructured Random Matrix', color='red')
+    plt.plot(random_feature_range, ortho_errors, label='Orthogonal Random Matrix', color='blue')
+    plt.fill_between(random_feature_range, np.array(unstruct_errors)-np.array(unstruct_errors_std), np.array(unstruct_errors)+np.array(unstruct_errors_std), color='red', alpha=0.3)
+    plt.fill_between(random_feature_range, np.array(ortho_errors)-np.array(ortho_errors_std),np.array(ortho_errors)+np.array(ortho_errors_std), color='blue', alpha=0.3)
+    plt.xlabel('Number of Random Features')
+    plt.ylabel('MSE')
+    plt.yscale('log')
+    plt.legend()
+    plt.savefig('exp1.png')
+
 
 Exp1()
