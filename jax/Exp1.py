@@ -81,8 +81,9 @@ def Exp1():
     plt.xlabel('Number of Random Features')
     plt.ylabel('MSE')
     plt.yscale('log')
+    plt.title('Attention matrix comparison of using unstructured vs. orthogonal random sampling')
     plt.legend()
-    plt.savefig('exp1.png')
+    plt.savefig('exp1.png', dpi=400, bbox_inches="tight")
 
 
 Exp1()
