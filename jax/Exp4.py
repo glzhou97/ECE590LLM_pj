@@ -14,7 +14,7 @@ from fast_attention import nonnegative_softmax_kernel_feature_creator
 import numpy as np
 
 
-def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_features: int = 256):
+def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_features: int = 256, features_type: str = 'iid'):
     jit = True
     qk_dim = 16
     sample_number = 10
@@ -27,6 +27,7 @@ def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_
             qk_dim // num_heads,
             renormalize_attention=renormalize_attention,
             nb_features=nb_features,
+            features_type=features_type,
             unidirectional=unidirectional)
     else:
         raw_attention_fn = attention.dot_product_attention
@@ -62,21 +63,30 @@ def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_
             grad_fn(query).block_until_ready()
             end = time.time()
         time_taken.append(end - start)
-    return np.mean(np.array(time_taken)) * 1000 # return in ms
+    return np.mean(np.array(time_taken)) * 1000  # return in ms
 
 
-def Exp4():
+def favor_plus_comparison():
+    # comparing favor+ with differet number of features vs regular
     runtime_att = []
+    runtime_fast_512 = []
     runtime_fast_256 = []
     runtime_fast_128 = []
     length_range = range(1, 15)
+    back_prop = False
     for n in length_range:
-        runtime_fast_256.append(get_run_time_ms(True, "backward", 2**n, 1, 256))
-        runtime_fast_128.append(get_run_time_ms(True, "backward", 2**n, 1, 128))
-        runtime_att.append(get_run_time_ms(False, "backward", 2**n, 1, -1))
+        runtime_fast_512.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 512))
+        runtime_fast_256.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 256))
+        runtime_fast_128.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 128))
+        runtime_att.append(get_run_time_ms(False, "backward" if back_prop else "forward", 2**n, 1, -1))
 
     plt.plot(length_range, runtime_att,
              label='Regular softmax attention', color='red')
+    plt.plot(length_range, runtime_fast_512,
+             label='FAVOR+ attention with 512 features', color='orange')
     plt.plot(length_range, runtime_fast_256,
              label='FAVOR+ attention with 256 features', color='blue')
     plt.plot(length_range, runtime_fast_128,
@@ -84,10 +94,34 @@ def Exp4():
     plt.xlabel(r'$Log_2(L)$')
     plt.ylabel('Log(T) (ms)')
     plt.title(
-        r'Speed comparison of regular and FAVOR+ attention backpropagation')
+        r'Speed comparison of regular and FAVOR+ attention forward pass')
     plt.yscale('log')
     plt.legend()
-    plt.savefig('exp4.png', dpi=400, bbox_inches="tight")
+    plt.savefig('favor_plus.png', dpi=400, bbox_inches="tight")
+
+
+def batch_size_comparison():
+    # comparing favor+ with differet number of features vs regular
+    batch_size = [1, 5, 10, 20]
+    length_range = range(1, 15)
+    back_prop = True
+    for b in batch_size:
+        time_per_batch = []
+        for n in length_range:
+            time_per_batch.append(get_run_time_ms(True, "backward" if back_prop else "forward", 2**n, b, 256))
+        plt.plot(length_range, time_per_batch, label="batch size {}".format(b))
+    plt.xlabel(r'$Log_2(L)$')
+    plt.ylabel('Log(T) (ms)')
+    plt.title(
+        r'FAVOR+ attention backpropogation speed with different batch sizes')
+    plt.yscale('log')
+    plt.legend()
+    plt.savefig('batch_size.png', dpi=400, bbox_inches="tight")
+
+
+def Exp4():
+    favor_plus_comparison()
+    # batch_size_comparison()
 
 
 Exp4()
