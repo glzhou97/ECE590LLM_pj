@@ -73,6 +73,8 @@ def favor_plus_comparison():
     runtime_fast_256 = []
     runtime_fast_128 = []
     length_range = range(1, 15)
+    
+    fig, axs = plt.subplots(1, 2)
     back_prop = False
     for n in length_range:
         runtime_fast_512.append(get_run_time_ms(
@@ -83,20 +85,45 @@ def favor_plus_comparison():
             True, "backward" if back_prop else "forward", 2**n, 1, 128))
         runtime_att.append(get_run_time_ms(False, "backward" if back_prop else "forward", 2**n, 1, -1))
 
-    plt.plot(length_range, runtime_att,
+    axs[0, 0].plot(length_range, runtime_att,
              label='Regular softmax attention', color='red')
-    plt.plot(length_range, runtime_fast_512,
+    axs[0, 0].plot(length_range, runtime_fast_512,
              label='FAVOR+ attention with 512 features', color='orange')
-    plt.plot(length_range, runtime_fast_256,
+    axs[0, 0].plot(length_range, runtime_fast_256,
              label='FAVOR+ attention with 256 features', color='blue')
-    plt.plot(length_range, runtime_fast_128,
+    axs[0, 0].plot(length_range, runtime_fast_128,
              label='FAVOR+ attention with 128 features', color='green')
-    plt.xlabel(r'$Log_2(L)$')
-    plt.ylabel('Log(T) (ms)')
-    plt.title(
-        r'Speed comparison of regular and FAVOR+ attention forward pass')
+    axs[0, 0].set_title(r'Forward pass')
+    axs[0, 0].legend()
+
+    back_prop = False
+    for n in length_range:
+        runtime_fast_512.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 512))
+        runtime_fast_256.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 256))
+        runtime_fast_128.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 128))
+        runtime_att.append(get_run_time_ms(False, "backward" if back_prop else "forward", 2**n, 1, -1))
+
+    axs[0, 0].plot(length_range, runtime_att,
+             label='Regular softmax attention', color='red')
+    axs[0, 0].plot(length_range, runtime_fast_512,
+             label='FAVOR+ attention with 512 features', color='orange')
+    axs[0, 0].plot(length_range, runtime_fast_256,
+             label='FAVOR+ attention with 256 features', color='blue')
+    axs[0, 0].plot(length_range, runtime_fast_128,
+             label='FAVOR+ attention with 128 features', color='green')
+    axs[0, 0].set_title(
+        r'SBackpropogation')
+    axs[0, 0].legend()
+
+    for ax in axs.flat:
+        ax.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    for ax in axs.flat:
+        ax.label_outer()
+
     plt.yscale('log')
-    plt.legend()
     plt.savefig('favor_plus.png', dpi=400, bbox_inches="tight")
 
 
