@@ -14,7 +14,7 @@ from fast_attention import nonnegative_softmax_kernel_feature_creator
 import numpy as np
 
 
-def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_features: int = 256, features_type: str = 'iid'):
+def get_run_time_ms(fast: bool, mode: str, length: int, batch_size: int = 1, nb_features: int = 256, features_type: str = 'deterministic'):
     jit = True
     qk_dim = 16
     sample_number = 10
@@ -73,8 +73,8 @@ def favor_plus_comparison():
     runtime_fast_256 = []
     runtime_fast_128 = []
     length_range = range(1, 15)
-    
-    fig, axs = plt.subplots(1, 2)
+
+    fig, (axs1, axs2) = plt.subplots(1, 2)
     back_prop = False
     for n in length_range:
         runtime_fast_512.append(get_run_time_ms(
@@ -83,20 +83,29 @@ def favor_plus_comparison():
             True, "backward" if back_prop else "forward", 2**n, 1, 256))
         runtime_fast_128.append(get_run_time_ms(
             True, "backward" if back_prop else "forward", 2**n, 1, 128))
-        runtime_att.append(get_run_time_ms(False, "backward" if back_prop else "forward", 2**n, 1, -1))
+        runtime_att.append(get_run_time_ms(
+            False, "backward" if back_prop else "forward", 2**n, 1, -1))
 
-    axs[0, 0].plot(length_range, runtime_att,
-             label='Regular softmax attention', color='red')
-    axs[0, 0].plot(length_range, runtime_fast_512,
-             label='FAVOR+ attention with 512 features', color='orange')
-    axs[0, 0].plot(length_range, runtime_fast_256,
-             label='FAVOR+ attention with 256 features', color='blue')
-    axs[0, 0].plot(length_range, runtime_fast_128,
-             label='FAVOR+ attention with 128 features', color='green')
-    axs[0, 0].set_title(r'Forward pass')
-    axs[0, 0].legend()
+    axs1.plot(length_range, runtime_att,
+              label='Regular softmax attention', color='red')
+    axs1.plot(length_range, runtime_fast_512,
+              label='FAVOR+ m=512', color='orange')
+    axs1.plot(length_range, runtime_fast_256,
+              label='FAVOR+ m=256', color='blue')
+    axs1.plot(length_range, runtime_fast_128,
+              label='FAVOR+ m=128', color='green')
+    axs1.set_title(r'Forward pass')
+    axs1.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    axs1.label_outer()
+    axs1.set_box_aspect(0.8)
+    axs1.set_yscale('log')
+    axs1.legend(prop={'size': 7})
 
     back_prop = False
+    runtime_att = []
+    runtime_fast_512 = []
+    runtime_fast_256 = []
+    runtime_fast_128 = []
     for n in length_range:
         runtime_fast_512.append(get_run_time_ms(
             True, "backward" if back_prop else "forward", 2**n, 1, 512))
@@ -104,51 +113,105 @@ def favor_plus_comparison():
             True, "backward" if back_prop else "forward", 2**n, 1, 256))
         runtime_fast_128.append(get_run_time_ms(
             True, "backward" if back_prop else "forward", 2**n, 1, 128))
-        runtime_att.append(get_run_time_ms(False, "backward" if back_prop else "forward", 2**n, 1, -1))
+        runtime_att.append(get_run_time_ms(
+            False, "backward" if back_prop else "forward", 2**n, 1, -1))
 
-    axs[0, 0].plot(length_range, runtime_att,
-             label='Regular softmax attention', color='red')
-    axs[0, 0].plot(length_range, runtime_fast_512,
-             label='FAVOR+ attention with 512 features', color='orange')
-    axs[0, 0].plot(length_range, runtime_fast_256,
-             label='FAVOR+ attention with 256 features', color='blue')
-    axs[0, 0].plot(length_range, runtime_fast_128,
-             label='FAVOR+ attention with 128 features', color='green')
-    axs[0, 0].set_title(
-        r'SBackpropogation')
-    axs[0, 0].legend()
+    axs2.plot(length_range, runtime_att,
+              label='Regular softmax attention', color='red')
+    axs2.plot(length_range, runtime_fast_512,
+              label='FAVOR+ m=512', color='orange')
+    axs2.plot(length_range, runtime_fast_256,
+              label='FAVOR+ m=256 ', color='blue')
+    axs2.plot(length_range, runtime_fast_128,
+              label='FAVOR+ m=128', color='green')
+    axs2.set_title(r'Backpropogation')
+    axs2.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    axs2.label_outer()
+    axs2.set_yscale('log')
+    axs2.set_box_aspect(0.8)
+    axs2.legend(prop={'size': 7})
 
-    for ax in axs.flat:
-        ax.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
-    for ax in axs.flat:
-        ax.label_outer()
-
-    plt.yscale('log')
     plt.savefig('favor_plus.png', dpi=400, bbox_inches="tight")
 
 
 def batch_size_comparison():
     # comparing favor+ with differet number of features vs regular
-    batch_size = [1, 5, 10, 20]
+    fig, (axs1, axs2) = plt.subplots(1, 2)
+    batch_size = [1, 5, 10, 15]
     length_range = range(1, 15)
+    back_prop = False
+    for b in batch_size:
+        time_per_batch = []
+        for n in length_range:
+            time_per_batch.append(get_run_time_ms(
+                True, "backward" if back_prop else "forward", 2**n, b, 256))
+        axs1.plot(length_range, time_per_batch, label="batch size {}".format(b))
+    axs1.set_title(r'Forward pass')
+    axs1.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    axs1.label_outer()
+    axs1.set_box_aspect(0.8)
+    axs1.set_yscale('log')
+    axs1.legend(prop={'size': 7})
+
     back_prop = True
     for b in batch_size:
         time_per_batch = []
         for n in length_range:
-            time_per_batch.append(get_run_time_ms(True, "backward" if back_prop else "forward", 2**n, b, 256))
-        plt.plot(length_range, time_per_batch, label="batch size {}".format(b))
-    plt.xlabel(r'$Log_2(L)$')
-    plt.ylabel('Log(T) (ms)')
-    plt.title(
-        r'FAVOR+ attention backpropogation speed with different batch sizes')
-    plt.yscale('log')
-    plt.legend()
+            time_per_batch.append(get_run_time_ms(
+                True, "backward" if back_prop else "forward", 2**n, b, 256))
+        axs2.plot(length_range, time_per_batch, label="batch size {}".format(b))
+    axs2.set_title(r'Back-propogation')
+    axs2.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    axs2.label_outer()
+    axs2.set_box_aspect(0.8)
+    axs2.set_yscale('log')
+    axs2.legend(prop={'size': 7})
+
     plt.savefig('batch_size.png', dpi=400, bbox_inches="tight")
 
 
+def estimator_comparison():
+    # comparing favor+ with differet number of features vs regular
+    runtime_trig = []
+    runtime_sm = []
+    runtime_sm_hyp = []
+    length_range = range(1, 15)
+
+    fig, (axs1, axs2) = plt.subplots(1, 2)
+    back_prop = False
+    for n in length_range:
+        runtime_fast_512.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 512))
+        runtime_fast_256.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 256))
+        runtime_fast_128.append(get_run_time_ms(
+            True, "backward" if back_prop else "forward", 2**n, 1, 128))
+        runtime_att.append(get_run_time_ms(
+            False, "backward" if back_prop else "forward", 2**n, 1, -1))
+
+    axs1.plot(length_range, runtime_att,
+              label='Regular softmax attention', color='red')
+    axs1.plot(length_range, runtime_fast_512,
+              label='FAVOR+ m=512', color='orange')
+    axs1.plot(length_range, runtime_fast_256,
+              label='FAVOR+ m=256', color='blue')
+    axs1.plot(length_range, runtime_fast_128,
+              label='FAVOR+ m=128', color='green')
+    axs1.set_title(r'Forward pass')
+    axs1.set(xlabel=r'$Log_2(L)$', ylabel='Log(T) (ms)')
+    axs1.label_outer()
+    axs1.set_box_aspect(0.8)
+    axs1.set_yscale('log')
+    axs1.legend(prop={'size': 7})
+
+
+    plt.savefig('estimator.png', dpi=400, bbox_inches="tight")
+
+
+
 def Exp4():
-    favor_plus_comparison()
-    # batch_size_comparison()
+    # favor_plus_comparison()
+    batch_size_comparison()
 
 
 Exp4()
